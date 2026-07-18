@@ -65,4 +65,12 @@ No routine test contacts Chess-Results. Parser behavior is exercised with saniti
 
 Cross-compile as shown above, install the binary at `/usr/local/bin/easy-chess-results-api`, copy the unit from `deploy/systemd`, and create `/etc/easy-chess-results-api.env`. The service binds to loopback by default; use Caddy, another maintained reverse proxy, or Tailscale for remote access.
 
+After the initial installation, update the Pi from the repository root with:
+
+```sh
+./deploy/update-raspberry-pi.sh
+```
+
+The script fast-forwards the current branch from GitHub, runs the tests, cross-compiles the ARM64 binary, uploads it over SSH, restarts the service, and checks readiness. It defaults to `alex@192.168.68.62`; pass another SSH destination as its first argument when needed. SSH credentials are never stored by the script.
+
 The database is a disposable cache/index but may contain player names and birth years. Do not copy a live WAL database directly; use SQLite's backup mechanism or `VACUUM INTO` when backups are required.
