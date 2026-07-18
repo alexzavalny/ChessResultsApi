@@ -25,29 +25,20 @@ echo "Running tests..."
 (cd "$repo_root" && go test ./...)
 
 work_dir="$(mktemp -d)"
-control_socket="$work_dir/ssh-control"
 remote_binary="/tmp/${SERVICE}.$$"
 
-close_connection() {
-  ssh -o "ControlPath=$control_socket" -O exit "$TARGET" >/dev/null 2>&1 || true
+cleanup() {
   rm -rf "$work_dir"
 }
-trap close_connection EXIT
+trap cleanup EXIT
 
 echo "Building Linux ARM64 binary..."
 (cd "$repo_root" && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
   go build -trimpath -o "$work_dir/$SERVICE" ./cmd/api)
 
-echo "Connecting to $TARGET..."
-ssh -o ControlMaster=yes -o ControlPersist=60 \
-  -o "ControlPath=$control_socket" -o StrictHostKeyChecking=accept-new \
-  -MNf "$TARGET"
-
-scp -o "ControlPath=$control_socket" \
-  "$work_dir/$SERVICE" "$TARGET:$remote_binary"
-
 echo "Installing and restarting $SERVICE..."
-ssh -o "ControlPath=$control_socket" "$TARGET" \
-  "set -e; sudo install -o root -g root -m 0755 '$remote_binary' '$INSTALL_PATH'; rm -f '$remote_binary'; sudo systemctl restart '$SERVICE'; sudo systemctl is-active --quiet '$SERVICE'; curl -fsS --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/health/ready"
+ssh -o StrictHostKeyChecking=accept-new "$TARGET" \
+  "set -e; cat > '$remote_binary'; chmod 0755 '$remote_binary'; sudo install -o root -g root -m 0755 '$remote_binary' '$INSTALL_PATH'; rm -f '$remote_binary'; sudo systemctl restart '$SERVICE'; sudo systemctl is-active --quiet '$SERVICE'; curl -fsS --retry 10 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/health/ready" \
+  < "$work_dir/$SERVICE"
 
 printf '\nDeployment complete: http://%s:8080\n' "${TARGET#*@}"
