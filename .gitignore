@@ -1,0 +1,6 @@
+/data/
+/easy-chess-results-api
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env

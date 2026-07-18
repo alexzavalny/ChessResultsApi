@@ -1,0 +1,113 @@
+package api
+
+import (
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/alex/easy-chess-results-api/internal/config"
+	"github.com/alex/easy-chess-results-api/internal/service"
+	"github.com/alex/easy-chess-results-api/internal/store"
+	"github.com/alex/easy-chess-results-api/internal/upstream"
+)
+
+func TestTournamentCoalescingCacheAndETag(t *testing.T) {
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "event.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		time.Sleep(30 * time.Millisecond)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write(fixture)
+	}))
+	defer upstreamServer.Close()
+	cfg := config.Config{UpstreamBaseURL: upstreamServer.URL, UpstreamLanguage: "1", UpstreamTimeout: 2 * time.Second, UpstreamMaxConcurrency: 2, UpstreamMinInterval: time.Millisecond, UpstreamMaxBodyBytes: 1024 * 1024, ActiveStandingsTTL: time.Hour, CompletedTTL: time.Hour, MaxStaleActive: time.Hour, MaxStaleCompleted: time.Hour, CacheControlMaxAge: 30, DefaultFederation: "LAT", MaxSearchResults: 100, SearchTTL: time.Hour}
+	st, err := store.Open(filepath.Join(t.TempDir(), "api.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	client, err := upstream.New(cfg.UpstreamBaseURL, cfg.UpstreamLanguage, cfg.UpstreamTimeout, cfg.UpstreamMaxConcurrency, cfg.UpstreamMinInterval, cfg.UpstreamMaxBodyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := New(cfg, service.New(cfg, st, client), st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resp, e := http.Get(server.URL + "/api/v1/tournaments/1359649")
+			if e == nil && resp.StatusCode != http.StatusOK {
+				e = &statusError{status: resp.StatusCode}
+			}
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			errs <- e
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("identical refreshes made %d upstream requests", calls.Load())
+	}
+	resp, err := http.Get(server.URL + "/api/v1/tournaments/1359649")
+	if err != nil {
+		t.Fatal(err)
+	}
+	etag := resp.Header.Get("ETag")
+	_ = resp.Body.Close()
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/api/v1/tournaments/1359649", nil)
+	req.Header.Set("If-None-Match", etag)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotModified || etag == "" || calls.Load() != 1 {
+		t.Fatalf("status=%d etag=%q calls=%d", resp.StatusCode, etag, calls.Load())
+	}
+}
+
+type statusError struct{ status int }
+
+func (e *statusError) Error() string { return http.StatusText(e.status) }
+
+func TestCountryFilter(t *testing.T) {
+	tests := []struct {
+		country, federation, fallback, want string
+		wantError                           bool
+	}{
+		{country: "est", fallback: "LAT", want: "EST"},
+		{federation: "LTU", fallback: "LAT", want: "LTU"},
+		{fallback: "LAT", want: "LAT"},
+		{country: "LAT", federation: "EST", fallback: "LTU", wantError: true},
+	}
+	for _, tc := range tests {
+		got, err := countryFilter(tc.country, tc.federation, tc.fallback)
+		if (err != nil) != tc.wantError || got != tc.want {
+			t.Fatalf("countryFilter(%q,%q,%q) = %q,%v", tc.country, tc.federation, tc.fallback, got, err)
+		}
+	}
+}
