@@ -1,0 +1,1053 @@
+openapi: 3.1.0
+info:
+  title: Easy Chess Results API
+  version: 1.0.0
+  description: |
+    Read-only JSON API for tournament and player data obtained from Chess-Results.
+
+    Responses derived from Chess-Results include freshness information in `meta`.
+    Player search is limited to players observed in tournaments previously parsed by
+    this service; it is not a global Chess-Results player directory.
+
+    Bearer authentication is enabled only when the operator configures `API_KEYS`.
+    Health, documentation, and OpenAPI routes are always unauthenticated.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+    description: The server that provided this document
+tags:
+  - name: Health
+    description: Lightweight process and local-store health checks.
+  - name: Tournaments
+    description: Tournament discovery, metadata, standings, and participant results.
+  - name: Players
+    description: Players observed and merged into the service's local index.
+  - name: Documentation
+    description: Machine-readable and interactive descriptions of this API.
+paths:
+  /openapi.yaml:
+    get:
+      tags: [Documentation]
+      operationId: getOpenAPIDocument
+      summary: Get this OpenAPI document
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 document
+          content:
+            application/yaml:
+              schema:
+                type: string
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /docs:
+    get:
+      tags: [Documentation]
+      operationId: getInteractiveDocumentation
+      summary: Open interactive API documentation
+      security: []
+      responses:
+        "200":
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Check process liveness
+      description: Does not contact Chess-Results or perform a database operation.
+      security: []
+      responses:
+        "200":
+          description: Process is alive
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Check service readiness
+      description: Checks that the local SQLite store is usable without contacting Chess-Results.
+      security: []
+      responses:
+        "200":
+          description: Service is ready
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+  /api/v1/tournaments:
+    get:
+      tags: [Tournaments]
+      operationId: searchTournaments
+      summary: Search tournaments
+      description: Searches Chess-Results and optionally filters the parsed results locally.
+      parameters:
+        - name: country
+          in: query
+          description: Three-letter federation code, or `-` for all countries. Preferred over the compatibility alias `federation`.
+          schema:
+            type: string
+            pattern: "^([A-Za-z]{3}|-)$"
+          example: LAT
+        - name: federation
+          in: query
+          deprecated: true
+          description: Compatibility alias for `country`. If both are supplied, their values must match.
+          schema:
+            type: string
+            pattern: "^([A-Za-z]{3}|-)$"
+        - name: end_from
+          in: query
+          description: Earliest tournament end date.
+          schema:
+            type: string
+            format: date
+        - name: end_to
+          in: query
+          description: Latest tournament end date. The configured maximum search interval applies.
+          schema:
+            type: string
+            format: date
+        - name: q
+          in: query
+          description: Case-insensitive local substring filter for tournament names.
+          schema:
+            type: string
+        - name: time_control
+          in: query
+          description: Case-insensitive local time-control filter.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Matching tournaments
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentSearchResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/tournaments/{tournament_id}:
+    get:
+      tags: [Tournaments]
+      operationId: getTournament
+      summary: Get tournament details
+      parameters:
+        - $ref: "#/components/parameters/TournamentID"
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Tournament details
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/tournaments/{tournament_id}/standings:
+    get:
+      tags: [Tournaments]
+      operationId: getTournamentStandings
+      summary: Get tournament standings
+      parameters:
+        - $ref: "#/components/parameters/TournamentID"
+        - name: round
+          in: query
+          description: Positive round number. Omit for the latest/current ranking.
+          schema:
+            type: integer
+            minimum: 1
+        - name: group
+          in: query
+          description: Exact group value for tournaments containing a group column.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum standings rows after group filtering. Zero or omitted means all rows.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 500
+        - name: offset
+          in: query
+          description: Number of filtered standings rows to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Tournament standings
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandingsResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/tournaments/{tournament_id}/players/{start_number}:
+    get:
+      tags: [Tournaments]
+      operationId: getTournamentParticipant
+      summary: Get one tournament participant
+      parameters:
+        - $ref: "#/components/parameters/TournamentID"
+        - $ref: "#/components/parameters/StartNumber"
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Tournament participant details
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/tournaments/{tournament_id}/players/{start_number}/results:
+    get:
+      tags: [Tournaments]
+      operationId: getTournamentParticipantResults
+      summary: Get one participant's tournament results
+      parameters:
+        - $ref: "#/components/parameters/TournamentID"
+        - $ref: "#/components/parameters/StartNumber"
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Round-by-round participant results
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerResultsResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/players:
+    get:
+      tags: [Players]
+      operationId: searchPlayers
+      summary: Search locally indexed players
+      description: Searches only players observed while this service parsed tournaments.
+      parameters:
+        - name: q
+          in: query
+          description: Case-insensitive player name search.
+          schema:
+            type: string
+        - name: fide_id
+          in: query
+          description: Exact digits-only FIDE ID.
+          schema:
+            type: string
+            pattern: "^[0-9]+$"
+        - name: federation
+          in: query
+          description: Three-letter federation code.
+          schema:
+            type: string
+            pattern: "^[A-Za-z]{3}$"
+        - name: limit
+          in: query
+          description: Maximum number of matches.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of matches to skip.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Matching locally indexed players
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerSearchResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/players/{player_key}:
+    get:
+      tags: [Players]
+      operationId: getIndexedPlayer
+      summary: Get a locally indexed player
+      description: Returns the merged local identity and the tournament appearances known to this service.
+      parameters:
+        - name: player_key
+          in: path
+          required: true
+          description: Service player key, such as `fide:11653949` or a generated local key.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Indexed player and known tournament appearances
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Required for API routes when the server operator configures `API_KEYS`.
+  parameters:
+    TournamentID:
+      name: tournament_id
+      in: path
+      required: true
+      description: Digits-only Chess-Results tournament identifier.
+      schema:
+        type: string
+        pattern: "^[0-9]{1,20}$"
+      example: "1359649"
+    StartNumber:
+      name: start_number
+      in: path
+      required: true
+      description: Digits-only tournament-scoped starting number.
+      schema:
+        type: string
+        pattern: "^[0-9]{1,20}$"
+      example: "61"
+    Refresh:
+      name: refresh
+      in: query
+      description: Request an upstream refresh instead of relying only on fresh cached data.
+      schema:
+        type: boolean
+        default: false
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: Return `304 Not Modified` when this value matches the current response ETag.
+      schema:
+        type: string
+  headers:
+    ETag:
+      description: SHA-256 validator for the canonical JSON response body.
+      schema:
+        type: string
+      example: '"b3a0f0..."'
+    RequestID:
+      description: Identifier associated with request logs and any returned error.
+      schema:
+        type: string
+    StaleWarning:
+      description: Present as `110 - "Response is stale"` when stale cached data is returned.
+      schema:
+        type: string
+  responses:
+    NotModified:
+      description: The representation matches `If-None-Match`; no response body is returned.
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+    BadRequest:
+      description: Invalid path, query parameter, or request.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: A valid Bearer API key is required by this deployment.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: The resource does not exist locally or upstream.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    MethodNotAllowed:
+      description: The HTTP method is not allowed for this resource.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: An internal error occurred.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    BadGateway:
+      description: Chess-Results returned a page layout the parser does not recognize.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: The service is not ready, or Chess-Results is unavailable and no usable cached data exists.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [source_url, fetched_at, age_seconds, cache, stale]
+      properties:
+        source_url:
+          type: string
+          format: uri
+        fetched_at:
+          type: string
+          format: date-time
+        age_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+        cache:
+          type: string
+          enum: [hit, miss, refreshed, stale-fallback]
+        stale:
+          type: boolean
+    StringMap:
+      type: object
+      additionalProperties:
+        type: string
+    TournamentSearchResult:
+      type: object
+      additionalProperties: false
+      required: [id, name, federation, starts_on, ends_on, time_control, source_url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        federation:
+          type: [string, "null"]
+        starts_on:
+          type: [string, "null"]
+          format: date
+        ends_on:
+          type: [string, "null"]
+          format: date
+        time_control:
+          type: [string, "null"]
+        source_url:
+          type: string
+          format: uri
+    TournamentSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [data, count, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TournamentSearchResult"
+        count:
+          type: integer
+          minimum: 0
+        meta:
+          $ref: "#/components/schemas/Meta"
+    Tournament:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - federation
+        - starts_on
+        - ends_on
+        - date_text
+        - round_count
+        - tournament_type
+        - time_control
+        - last_upstream_update
+        - available_standing_rounds
+        - available_pairing_rounds
+        - extra
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        federation:
+          type: [string, "null"]
+        starts_on:
+          type: [string, "null"]
+          format: date
+        ends_on:
+          type: [string, "null"]
+          format: date
+        date_text:
+          type: [string, "null"]
+        round_count:
+          type: [integer, "null"]
+        tournament_type:
+          type: [string, "null"]
+        time_control:
+          type: [string, "null"]
+        last_upstream_update:
+          type: [string, "null"]
+        available_standing_rounds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        available_pairing_rounds:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        source_url:
+          type: string
+          format: uri
+        extra:
+          $ref: "#/components/schemas/StringMap"
+    TournamentResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/Tournament"
+        meta:
+          $ref: "#/components/schemas/Meta"
+    Standing:
+      type: object
+      additionalProperties: false
+      required:
+        - rank
+        - start_number
+        - player_key
+        - name
+        - title
+        - rating
+        - federation
+        - club
+        - points
+        - points_text
+        - tie_breaks
+        - group
+        - player_results_path
+        - extra
+      properties:
+        rank:
+          type: [integer, "null"]
+        start_number:
+          type: string
+        player_key:
+          type: string
+        name:
+          type: string
+        title:
+          type: [string, "null"]
+        rating:
+          type: [integer, "null"]
+        federation:
+          type: [string, "null"]
+        club:
+          type: [string, "null"]
+        points:
+          type: [number, "null"]
+        points_text:
+          type: string
+        tie_breaks:
+          $ref: "#/components/schemas/StringMap"
+        group:
+          type: [string, "null"]
+        player_results_path:
+          type: string
+        extra:
+          $ref: "#/components/schemas/StringMap"
+    Standings:
+      type: object
+      additionalProperties: false
+      required: [tournament_id, round, heading, standings]
+      properties:
+        tournament_id:
+          type: string
+        round:
+          type: [integer, "null"]
+        heading:
+          type: string
+        standings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Standing"
+    StandingsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/Standings"
+        meta:
+          $ref: "#/components/schemas/Meta"
+    Participant:
+      type: object
+      additionalProperties: false
+      required:
+        - tournament_id
+        - start_number
+        - player_key
+        - name
+        - title
+        - starting_rank
+        - rating
+        - national_rating
+        - international_rating
+        - performance_rating
+        - points
+        - rank
+        - federation
+        - club
+        - fide_id
+        - birth_year
+        - rating_change
+        - extra
+      properties:
+        tournament_id:
+          type: string
+        start_number:
+          type: string
+        player_key:
+          type: string
+        name:
+          type: string
+        title:
+          type: [string, "null"]
+        starting_rank:
+          type: [integer, "null"]
+        rating:
+          type: [integer, "null"]
+        national_rating:
+          type: [integer, "null"]
+        international_rating:
+          type: [integer, "null"]
+        performance_rating:
+          type: [integer, "null"]
+        points:
+          type: [number, "null"]
+        rank:
+          type: [integer, "null"]
+        federation:
+          type: [string, "null"]
+        club:
+          type: [string, "null"]
+        fide_id:
+          type: [string, "null"]
+        birth_year:
+          type: [integer, "null"]
+        rating_change:
+          type: [number, "null"]
+        extra:
+          $ref: "#/components/schemas/StringMap"
+    ParticipantResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/Participant"
+        meta:
+          $ref: "#/components/schemas/Meta"
+    PlayerSummary:
+      type: object
+      additionalProperties: false
+      required: [player_key, name, fide_id, points, rank]
+      properties:
+        player_key:
+          type: string
+        name:
+          type: string
+        fide_id:
+          type: [string, "null"]
+        points:
+          type: [number, "null"]
+        rank:
+          type: [integer, "null"]
+    Game:
+      type: object
+      additionalProperties: false
+      required:
+        - round
+        - board
+        - color
+        - opponent_start_number
+        - opponent_name
+        - opponent_title
+        - opponent_rating
+        - opponent_federation
+        - opponent_club
+        - opponent_points
+        - result
+        - result_kind
+        - source_result_text
+      properties:
+        round:
+          type: [integer, "null"]
+        board:
+          type: [integer, "null"]
+        color:
+          type: [string, "null"]
+          enum: [white, black, null]
+        opponent_start_number:
+          type: [string, "null"]
+        opponent_name:
+          type: string
+        opponent_title:
+          type: [string, "null"]
+        opponent_rating:
+          type: [integer, "null"]
+        opponent_federation:
+          type: [string, "null"]
+        opponent_club:
+          type: [string, "null"]
+        opponent_points:
+          type: [number, "null"]
+        result:
+          type: [string, "null"]
+          description: Normalized result such as `1`, `0.5`, `0`, `+`, or `-`.
+        result_kind:
+          type: string
+          enum: [win, draw, loss, forfeit_win, forfeit_loss, bye, unplayed, unknown]
+        source_result_text:
+          type: string
+    PlayerResults:
+      type: object
+      additionalProperties: false
+      required: [tournament_id, start_number, player, games]
+      properties:
+        tournament_id:
+          type: string
+        start_number:
+          type: string
+        player:
+          $ref: "#/components/schemas/PlayerSummary"
+        games:
+          type: array
+          items:
+            $ref: "#/components/schemas/Game"
+    PlayerResultsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/PlayerResults"
+        meta:
+          $ref: "#/components/schemas/Meta"
+    Appearance:
+      type: object
+      additionalProperties: false
+      required: [tournament_id, start_number, display_name, federation, club, rating, seen_at]
+      properties:
+        tournament_id:
+          type: string
+        start_number:
+          type: string
+        display_name:
+          type: string
+        federation:
+          type: [string, "null"]
+        club:
+          type: [string, "null"]
+        rating:
+          type: [integer, "null"]
+        seen_at:
+          type: string
+          format: date-time
+    IndexedPlayer:
+      type: object
+      additionalProperties: false
+      required:
+        - player_key
+        - name
+        - fide_id
+        - federation
+        - club
+        - identity_confidence
+        - tournament_count
+        - last_seen_at
+      properties:
+        player_key:
+          type: string
+        name:
+          type: string
+        fide_id:
+          type: [string, "null"]
+        federation:
+          type: [string, "null"]
+        club:
+          type: [string, "null"]
+        identity_confidence:
+          type: string
+          enum: [fide, name_federation, tournament_only]
+        tournament_count:
+          type: integer
+          minimum: 0
+        last_seen_at:
+          type: string
+          format: date-time
+        appearances:
+          type: array
+          items:
+            $ref: "#/components/schemas/Appearance"
+    PlayerSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [data, count, scope]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/IndexedPlayer"
+        count:
+          type: integer
+          minimum: 0
+        scope:
+          type: string
+          const: locally_indexed_tournaments
+    PlayerResponse:
+      type: object
+      additionalProperties: false
+      required: [data, scope]
+      properties:
+        data:
+          $ref: "#/components/schemas/IndexedPlayer"
+        scope:
+          type: string
+          const: locally_indexed_tournaments
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_request
+                - not_found
+                - method_not_allowed
+                - upstream_not_found
+                - upstream_unavailable
+                - upstream_parse_error
+                - internal_error
+            message:
+              type: string
+            request_id:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+security:
+  - bearerAuth: []
+  - {}

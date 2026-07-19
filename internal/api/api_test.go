@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,68 @@ import (
 	"github.com/alex/easy-chess-results-api/internal/store"
 	"github.com/alex/easy-chess-results-api/internal/upstream"
 )
+
+func TestDocumentationEndpoints(t *testing.T) {
+	cfg := config.Config{APIKeys: map[string]struct{}{"secret": {}}}
+	handler := New(cfg, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	tests := []struct {
+		path        string
+		contentType string
+		contains    string
+	}{
+		{path: "/openapi.yaml", contentType: "application/yaml", contains: "openapi: 3.1.0"},
+		{path: "/docs", contentType: "text/html", contains: "SwaggerUIBundle"},
+		{path: "/docs/", contentType: "text/html", contains: "/openapi.yaml"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, tc.path, nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, tc.contentType) {
+				t.Fatalf("Content-Type = %q, want prefix %q", got, tc.contentType)
+			}
+			if !strings.Contains(recorder.Body.String(), tc.contains) {
+				t.Fatalf("response does not contain %q", tc.contains)
+			}
+		})
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/openapi.yaml", nil))
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /openapi.yaml status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestOpenAPICoversImplementedRoutes(t *testing.T) {
+	spec := string(openAPISpec)
+	paths := []string{
+		"/openapi.yaml",
+		"/docs",
+		"/health/live",
+		"/health/ready",
+		"/api/v1/tournaments",
+		"/api/v1/tournaments/{tournament_id}",
+		"/api/v1/tournaments/{tournament_id}/standings",
+		"/api/v1/tournaments/{tournament_id}/players/{start_number}",
+		"/api/v1/tournaments/{tournament_id}/players/{start_number}/results",
+		"/api/v1/players",
+		"/api/v1/players/{player_key}",
+	}
+	for _, path := range paths {
+		if !strings.Contains(spec, "  "+path+":\n") {
+			t.Errorf("OpenAPI document does not define %s", path)
+		}
+	}
+	if strings.Contains(spec, "/pairings:") {
+		t.Error("OpenAPI document advertises the unimplemented pairings endpoint")
+	}
+}
 
 func TestTournamentCoalescingCacheAndETag(t *testing.T) {
 	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "event.html"))

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -44,12 +45,45 @@ const requestIDKey contextKey = "request_id"
 
 var digits = regexp.MustCompile(`^[0-9]+$`)
 
+//go:embed openapi.yaml
+var openAPISpec []byte
+
+const docsHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Easy Chess Results API</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: "/openapi.yaml",
+      dom_id: "#swagger-ui",
+      deepLinking: true,
+      displayRequestDuration: true,
+      persistAuthorization: true
+    });
+  </script>
+</body>
+</html>
+`
+
 func New(cfg config.Config, svc *service.Service, st *store.Store, log *slog.Logger) http.Handler {
 	a := &API{cfg: cfg, service: svc, store: st, log: log}
 	for k := range cfg.APIKeys {
 		a.keys = append(a.keys, sha256.Sum256([]byte(k)))
 	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /openapi.yaml", a.openAPI)
+	mux.HandleFunc("/openapi.yaml", a.methodNotAllowed)
+	mux.HandleFunc("GET /docs", a.docs)
+	mux.HandleFunc("/docs", a.methodNotAllowed)
+	mux.HandleFunc("GET /docs/", a.docs)
+	mux.HandleFunc("/docs/", a.methodNotAllowed)
 	mux.HandleFunc("GET /health/live", a.live)
 	mux.HandleFunc("GET /health/ready", a.ready)
 	mux.HandleFunc("/health/live", a.methodNotAllowed)
@@ -70,6 +104,20 @@ func New(cfg config.Config, svc *service.Service, st *store.Store, log *slog.Log
 	mux.Handle("/api/v1/players/{key}", a.auth(http.HandlerFunc(a.methodNotAllowed)))
 	mux.HandleFunc("/", a.notFound)
 	return a.middleware(mux)
+}
+
+func (a *API) openAPI(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(openAPISpec)
+}
+
+func (a *API) docs(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(docsHTML))
 }
 
 func (a *API) middleware(next http.Handler) http.Handler {

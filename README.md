@@ -16,6 +16,24 @@ GET /api/v1/players
 GET /api/v1/players/{player_key}
 ```
 
+## API documentation
+
+The server publishes an OpenAPI 3.1 contract alongside the API:
+
+```text
+GET /openapi.yaml
+GET /docs
+```
+
+`/openapi.yaml` is the machine-readable API description for client generation,
+testing tools, and API clients such as Postman. `/docs` renders the same contract
+as interactive Swagger UI documentation. Both routes are unauthenticated; API
+operations shown in the documentation still require a Bearer key when `API_KEYS`
+is configured.
+
+The source contract is kept in `internal/api/openapi.yaml` and embedded in the Go
+binary, so deployment still requires only the executable.
+
 Tournament search supports `country`, `end_from`, `end_to`, `q`, `time_control`, and `refresh`. `country` accepts a three-letter federation code such as `LAT`, while `-` searches all countries. The older `federation` name remains available as a compatibility alias. Standings support `round`, `group`, `limit`, `offset`, and `refresh`. Player search is explicitly limited to players observed while parsing tournaments.
 
 Round pairings are not advertised yet. The technical specification requires representative live fixtures from multiple tournament layouts before that parser can be declared stable.
