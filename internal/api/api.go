@@ -155,7 +155,7 @@ func (a *API) handleCORS(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, If-None-Match")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, If-None-Match, Ngrok-Skip-Browser-Warning")
 	w.Header().Set("Access-Control-Max-Age", "600")
 	w.WriteHeader(http.StatusNoContent)
 	return true

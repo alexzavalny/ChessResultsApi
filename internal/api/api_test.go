@@ -79,6 +79,9 @@ func TestCORSAllowsConfiguredFrontendAndPreflight(t *testing.T) {
 	if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodGet) {
 		t.Fatalf("Access-Control-Allow-Methods = %q", got)
 	}
+	if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Ngrok-Skip-Browser-Warning") {
+		t.Fatalf("Access-Control-Allow-Headers = %q", got)
+	}
 }
 
 func TestCORSDoesNotAllowUnconfiguredOrigin(t *testing.T) {
