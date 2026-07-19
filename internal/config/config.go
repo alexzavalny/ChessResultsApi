@@ -32,6 +32,7 @@ type Config struct {
 	LogLevel                string
 	LogFormat               string
 	APIKeys                 map[string]struct{}
+	CORSAllowedOrigins      map[string]struct{}
 	AllowInsecurePublicBind bool
 }
 
@@ -42,6 +43,7 @@ func Load() (Config, error) {
 		UpstreamBaseURL: env("UPSTREAM_BASE_URL", "https://s2.chess-results.com"), LogLevel: env("LOG_LEVEL", "info"), LogFormat: env("LOG_FORMAT", "json"),
 		MaxSearchIntervalDays: envInt("MAX_SEARCH_INTERVAL_DAYS", 366), MaxSearchResults: envInt("MAX_SEARCH_RESULTS", 500),
 		CacheControlMaxAge: envInt("CACHE_CONTROL_MAX_AGE", 30), APIKeys: parseKeys(os.Getenv("API_KEYS")),
+		CORSAllowedOrigins:      parseKeys(env("CORS_ALLOWED_ORIGINS", "https://alexzavalny.github.io,http://localhost:8000,http://127.0.0.1:8000")),
 		AllowInsecurePublicBind: envBool("ALLOW_INSECURE_PUBLIC_BIND", false),
 	}
 	var err error

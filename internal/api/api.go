@@ -127,6 +127,10 @@ func (a *API) middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		ctx := context.WithValue(r.Context(), requestIDKey, id)
 		rw := &statusWriter{ResponseWriter: w, status: 200}
+		if a.handleCORS(rw, r) {
+			a.log.Info("http request", "request_id", id, "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration_ms", time.Since(start).Milliseconds())
+			return
+		}
 		if len(r.RequestURI) > 8192 {
 			a.writeError(rw, r.WithContext(ctx), http.StatusBadRequest, "invalid_request", "Request URL is too long.", nil)
 			a.log.Info("http request", "request_id", id, "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration_ms", time.Since(start).Milliseconds())
@@ -135,6 +139,26 @@ func (a *API) middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r.WithContext(ctx))
 		a.log.Info("http request", "request_id", id, "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration_ms", time.Since(start).Milliseconds())
 	})
+}
+
+func (a *API) handleCORS(w http.ResponseWriter, r *http.Request) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return false
+	}
+	w.Header().Add("Vary", "Origin")
+	if _, allowed := a.cfg.CORSAllowedOrigins[origin]; !allowed {
+		return false
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	if r.Method != http.MethodOptions {
+		return false
+	}
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, If-None-Match")
+	w.Header().Set("Access-Control-Max-Age", "600")
+	w.WriteHeader(http.StatusNoContent)
+	return true
 }
 
 type statusWriter struct {

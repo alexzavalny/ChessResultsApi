@@ -58,6 +58,8 @@ Authorization: Bearer <key>
 
 Health routes remain unauthenticated. Keys are only retained as SHA-256 digests by the HTTP layer after configuration is loaded.
 
+Browser clients are allowed only from the comma-separated origins in `CORS_ALLOWED_ORIGINS`. The default covers this project's GitHub Pages site and local development on port 8000; replace it when the frontend moves to another origin.
+
 ## Examples
 
 ```sh

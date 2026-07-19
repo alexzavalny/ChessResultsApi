@@ -56,6 +56,43 @@ func TestDocumentationEndpoints(t *testing.T) {
 	}
 }
 
+func TestCORSAllowsConfiguredFrontendAndPreflight(t *testing.T) {
+	cfg := config.Config{CORSAllowedOrigins: map[string]struct{}{"https://alexzavalny.github.io": {}}}
+	handler := New(cfg, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	request.Header.Set("Origin", "https://alexzavalny.github.io")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://alexzavalny.github.io" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+
+	request = httptest.NewRequest(http.MethodOptions, "/api/v1/tournaments/42", nil)
+	request.Header.Set("Origin", "https://alexzavalny.github.io")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("preflight status = %d, want %d", recorder.Code, http.StatusNoContent)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, http.MethodGet) {
+		t.Fatalf("Access-Control-Allow-Methods = %q", got)
+	}
+}
+
+func TestCORSDoesNotAllowUnconfiguredOrigin(t *testing.T) {
+	cfg := config.Config{CORSAllowedOrigins: map[string]struct{}{"https://alexzavalny.github.io": {}}}
+	handler := New(cfg, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	request.Header.Set("Origin", "https://example.com")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
+	}
+}
+
 func TestOpenAPICoversImplementedRoutes(t *testing.T) {
 	spec := string(openAPISpec)
 	paths := []string{
