@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,7 @@ func (s *Service) SearchTournaments(ctx context.Context, fed, from, to, q, timeC
 	if err != nil {
 		return nil, meta, err
 	}
+	sortTournamentSearchResults(data)
 	filtered := data[:0]
 	for _, t := range data {
 		if q != "" && !strings.Contains(strings.ToLower(t.Name), strings.ToLower(q)) {
@@ -77,6 +79,19 @@ func (s *Service) SearchTournaments(ctx context.Context, fed, from, to, q, timeC
 		filtered = append(filtered, t)
 	}
 	return filtered, meta, nil
+}
+
+func sortTournamentSearchResults(data []domain.TournamentSearchResult) {
+	sort.SliceStable(data, func(i, j int) bool {
+		left, right := data[i].StartsOn, data[j].StartsOn
+		if left == nil {
+			return false
+		}
+		if right == nil {
+			return true
+		}
+		return *left < *right
+	})
 }
 
 func (s *Service) Tournament(ctx context.Context, id string, refresh bool) (domain.Tournament, domain.Meta, error) {
