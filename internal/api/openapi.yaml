@@ -883,6 +883,7 @@ components:
         - opponent_federation
         - opponent_club
         - opponent_points
+        - rating_change
         - result
         - result_kind
         - source_result_text
@@ -908,6 +909,9 @@ components:
           type: [string, "null"]
         opponent_points:
           type: [number, "null"]
+        rating_change:
+          type: [number, "null"]
+          description: The displayed player's FIDE rating-point change for this game.
         result:
           type: [string, "null"]
           description: Normalized result such as `1`, `0.5`, `0`, `+`, or `-`.

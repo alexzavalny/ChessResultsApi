@@ -9,8 +9,8 @@ import (
 	base "github.com/alex/easy-chess-results-api/internal/parser"
 )
 
-var metaAliases = map[string]string{"name": "name", "title": "title", "starting_rank": "starting_rank", "rank": "rank", "rating": "rating", "national_rating": "national_rating", "international_rating": "international_rating", "performance_rating": "performance_rating", "performance": "performance_rating", "points": "points", "federation": "federation", "club_city": "club", "club": "club", "fide_id": "fide_id", "fideid": "fide_id", "year_of_birth": "birth_year", "birth_year": "birth_year", "rating_change": "rating_change"}
-var gameAliases = map[string]string{"rd": "round", "rnd": "round", "round": "round", "bo": "board", "board": "board", "sno": "opponent_start_number", "no": "opponent_start_number", "name": "opponent_name", "title": "opponent_title", "titel": "opponent_title", "rtg": "opponent_rating", "fed": "opponent_federation", "club_city": "opponent_club", "pts": "opponent_points", "res": "result", "result": "result", "w_we": "rating_change"}
+var metaAliases = map[string]string{"name": "name", "title": "title", "starting_rank": "starting_rank", "rank": "rank", "rating": "rating", "national_rating": "national_rating", "international_rating": "international_rating", "performance_rating": "performance_rating", "performance": "performance_rating", "points": "points", "federation": "federation", "club_city": "club", "club": "club", "fide_id": "fide_id", "fideid": "fide_id", "year_of_birth": "birth_year", "birth_year": "birth_year", "rating_change": "rating_change", "fide_rtg": "rating_change"}
+var gameAliases = map[string]string{"rd": "round", "rnd": "round", "round": "round", "bo": "board", "board": "board", "sno": "opponent_start_number", "no": "opponent_start_number", "name": "opponent_name", "title": "opponent_title", "titel": "opponent_title", "rtg": "opponent_rating", "rtgi": "opponent_rating", "rating": "opponent_rating", "fed": "opponent_federation", "club_city": "opponent_club", "pts": "opponent_points", "res": "result", "result": "result"}
 
 func Parse(html, source, tournamentID, startNumber string) (domain.Participant, domain.PlayerResults, error) {
 	doc, err := base.RequireDoc(html)
@@ -82,6 +82,9 @@ func Parse(html, source, tournamentID, startNumber string) (domain.Participant, 
 	if tables.Length() > 1 {
 		results.Games = parseGames(tables.Eq(1))
 	}
+	if p.RatingChange == nil {
+		p.RatingChange = totalRatingChange(results.Games)
+	}
 	return p, results, nil
 }
 
@@ -91,6 +94,12 @@ func parseGames(table *goquery.Selection) []domain.Game {
 		return []domain.Game{}
 	}
 	headers := base.Headers(rows.First())
+	for i, header := range headers {
+		compact := strings.ToLower(strings.ReplaceAll(base.Text(header), " ", ""))
+		if strings.Contains(compact, "rtg") && strings.Contains(compact, "+/-") {
+			headers[i] = "rating_change"
+		}
+	}
 	for i, h := range headers {
 		if base.Key(h) != "" {
 			continue
@@ -132,7 +141,7 @@ func parseGames(table *goquery.Selection) []domain.Game {
 		if name == "" && raw == "" {
 			return
 		}
-		g := domain.Game{Round: base.Int(base.Cell(c, base.At(hm, "round"))), Board: base.Int(base.Cell(c, base.At(hm, "board"))), OpponentName: name, OpponentTitle: base.StringPtr(base.Cell(c, base.At(hm, "opponent_title"))), OpponentRating: base.Int(base.Cell(c, base.At(hm, "opponent_rating"))), OpponentFederation: base.StringPtr(base.Cell(c, base.At(hm, "opponent_federation"))), OpponentClub: base.StringPtr(base.Cell(c, base.At(hm, "opponent_club"))), OpponentPoints: base.Float(base.Cell(c, base.At(hm, "opponent_points"))), SourceResultText: raw}
+		g := domain.Game{Round: base.Int(base.Cell(c, base.At(hm, "round"))), Board: base.Int(base.Cell(c, base.At(hm, "board"))), OpponentName: name, OpponentTitle: base.StringPtr(base.Cell(c, base.At(hm, "opponent_title"))), OpponentRating: base.Int(base.Cell(c, base.At(hm, "opponent_rating"))), OpponentFederation: base.StringPtr(base.Cell(c, base.At(hm, "opponent_federation"))), OpponentClub: base.StringPtr(base.Cell(c, base.At(hm, "opponent_club"))), OpponentPoints: base.Float(base.Cell(c, base.At(hm, "opponent_points"))), RatingChange: base.Float(base.Cell(c, base.At(hm, "rating_change"))), SourceResultText: raw}
 		if a := c[nameIdx].Find("a[href]").First(); a.Length() > 0 {
 			h, _ := a.Attr("href")
 			if sn, ok := base.StartNumber(h); ok {
@@ -150,6 +159,21 @@ func parseGames(table *goquery.Selection) []domain.Game {
 		out = append(out, g)
 	})
 	return out
+}
+
+func totalRatingChange(games []domain.Game) *float64 {
+	var total float64
+	found := false
+	for _, game := range games {
+		if game.RatingChange != nil {
+			total += *game.RatingChange
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	return &total
 }
 
 func normalizeResult(raw, name string) (*string, string) {

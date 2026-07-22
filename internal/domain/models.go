@@ -106,6 +106,7 @@ type Game struct {
 	OpponentFederation  *string  `json:"opponent_federation"`
 	OpponentClub        *string  `json:"opponent_club"`
 	OpponentPoints      *float64 `json:"opponent_points"`
+	RatingChange        *float64 `json:"rating_change"`
 	Result              *string  `json:"result"`
 	ResultKind          string   `json:"result_kind"`
 	SourceResultText    string   `json:"source_result_text"`
