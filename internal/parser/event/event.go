@@ -197,6 +197,14 @@ func parseStandings(table *goquery.Selection, heading, id string) (domain.Standi
 	if headerIndex < 0 {
 		return domain.Standings{}, fmt.Errorf("ranking header row missing")
 	}
+	// Header normalization strips punctuation, so Chess-Results' "rtg+/-"
+	// would otherwise collide with the distinct "Rtg" column.
+	for i, header := range headers {
+		compact := strings.ToLower(strings.ReplaceAll(base.Text(header), " ", ""))
+		if strings.Contains(compact, "rtg") && strings.Contains(compact, "+/-") {
+			headers[i] = "rating_change"
+		}
+	}
 	// Chess-Results commonly leaves the title column header blank. Only assign
 	// it when sampled values look like chess titles, so flag/decorative columns
 	// remain absent from the domain model.
@@ -239,7 +247,7 @@ func parseStandings(table *goquery.Selection, heading, id string) (domain.Standi
 				sn = x
 			}
 		}
-		st := domain.Standing{Rank: base.Int(base.Cell(c, base.At(hm, "rank"))), StartNumber: sn, Name: name, Federation: fed, PlayerKey: base.PlayerKey(name, fide, fed), Title: base.StringPtr(base.Cell(c, base.At(hm, "title"))), Rating: base.Int(base.Cell(c, base.At(hm, "rating"))), Club: base.StringPtr(base.Cell(c, base.At(hm, "club"))), Points: base.Float(base.Cell(c, base.At(hm, "points"))), PointsText: base.Cell(c, base.At(hm, "points")), Group: base.StringPtr(base.Cell(c, base.At(hm, "group"))), TieBreaks: map[string]string{}, Extra: map[string]string{}, PlayerResultsPath: "/api/v1/tournaments/" + id + "/players/" + sn + "/results"}
+		st := domain.Standing{Rank: base.Int(base.Cell(c, base.At(hm, "rank"))), StartNumber: sn, Name: name, Federation: fed, PlayerKey: base.PlayerKey(name, fide, fed), Title: base.StringPtr(base.Cell(c, base.At(hm, "title"))), Rating: base.Int(base.Cell(c, base.At(hm, "rating"))), RatingChange: base.Float(base.Cell(c, base.At(hm, "rating_change"))), Club: base.StringPtr(base.Cell(c, base.At(hm, "club"))), Points: base.Float(base.Cell(c, base.At(hm, "points"))), PointsText: base.Cell(c, base.At(hm, "points")), Group: base.StringPtr(base.Cell(c, base.At(hm, "group"))), TieBreaks: map[string]string{}, Extra: map[string]string{}, PlayerResultsPath: "/api/v1/tournaments/" + id + "/players/" + sn + "/results"}
 		for i, h := range headers {
 			k := base.Key(h)
 			canon := k
@@ -248,7 +256,7 @@ func parseStandings(table *goquery.Selection, heading, id string) (domain.Standi
 			}
 			if strings.HasPrefix(k, "tb") {
 				st.TieBreaks[k] = base.Cell(c, i)
-			} else if _, known := map[string]bool{"rank": true, "start_number": true, "name": true, "federation": true, "fide_id": true, "title": true, "rating": true, "club": true, "points": true, "group": true}[canon]; !known && k != "" {
+			} else if _, known := map[string]bool{"rank": true, "start_number": true, "name": true, "federation": true, "fide_id": true, "title": true, "rating": true, "rating_change": true, "club": true, "points": true, "group": true}[canon]; !known && k != "" {
 				st.Extra[k] = base.Cell(c, i)
 			}
 		}

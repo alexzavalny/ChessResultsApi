@@ -22,7 +22,7 @@ func TestParseTournamentAndStandings(t *testing.T) {
 		t.Fatalf("standings: %#v", standing)
 	}
 	s := standing.Standings[0]
-	if s.StartNumber != "23" || s.Title == nil || *s.Title != "II" || s.Points == nil || *s.Points != 4.5 || s.TieBreaks["tb1"] != "17.0" || s.Group == nil || *s.Group != "U18" {
+	if s.StartNumber != "23" || s.Title == nil || *s.Title != "II" || s.Rating == nil || *s.Rating != 1468 || s.RatingChange == nil || *s.RatingChange != -8.2 || s.Points == nil || *s.Points != 4.5 || s.TieBreaks["tb1"] != "17.0" || s.Group == nil || *s.Group != "U18" {
 		t.Fatalf("standing: %#v", s)
 	}
 }

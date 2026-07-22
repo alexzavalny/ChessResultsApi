@@ -725,6 +725,7 @@ components:
         - name
         - title
         - rating
+        - rating_change
         - federation
         - club
         - points
@@ -746,6 +747,8 @@ components:
           type: [string, "null"]
         rating:
           type: [integer, "null"]
+        rating_change:
+          type: [number, "null"]
         federation:
           type: [string, "null"]
         club:

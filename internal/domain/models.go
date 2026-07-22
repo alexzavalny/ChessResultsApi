@@ -57,6 +57,7 @@ type Standing struct {
 	Name              string            `json:"name"`
 	Title             *string           `json:"title"`
 	Rating            *int              `json:"rating"`
+	RatingChange      *float64          `json:"rating_change"`
 	Federation        *string           `json:"federation"`
 	Club              *string           `json:"club"`
 	Points            *float64          `json:"points"`
