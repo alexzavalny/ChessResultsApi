@@ -365,12 +365,12 @@ paths:
     get:
       tags: [Players]
       operationId: searchPlayers
-      summary: Search locally indexed players
-      description: Searches only players observed while this service parsed tournaments.
+      summary: Search players
+      description: Searches the Chess-Results player database when q or fide_id is supplied. With neither, returns locally indexed players for backward compatibility.
       parameters:
         - name: q
           in: query
-          description: Case-insensitive player name search.
+          description: Player surname, full name, comma-separated surname and first name, or FIDE ID.
           schema:
             type: string
         - name: fide_id
@@ -379,9 +379,16 @@ paths:
           schema:
             type: string
             pattern: "^[0-9]+$"
+        - name: country
+          in: query
+          description: Three-letter player federation code.
+          schema:
+            type: string
+            pattern: "^[A-Za-z]{3}$"
         - name: federation
           in: query
-          description: Three-letter federation code.
+          description: Compatibility alias for country.
+          deprecated: true
           schema:
             type: string
             pattern: "^[A-Za-z]{3}$"
@@ -403,7 +410,7 @@ paths:
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
-          description: Matching locally indexed players
+          description: Matching players with current Chess-Results tournament targets
           headers:
             ETag:
               $ref: "#/components/headers/ETag"
@@ -423,6 +430,8 @@ paths:
           $ref: "#/components/responses/MethodNotAllowed"
         "500":
           $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
   /api/v1/players/{player_key}:
     get:
       tags: [Players]
@@ -954,6 +963,8 @@ components:
       properties:
         tournament_id:
           type: string
+        tournament_name:
+          type: string
         start_number:
           type: string
         display_name:
@@ -964,6 +975,9 @@ components:
           type: [string, "null"]
         rating:
           type: [integer, "null"]
+        ends_on:
+          type: string
+          format: date
         seen_at:
           type: string
           format: date-time
@@ -1017,7 +1031,7 @@ components:
           minimum: 0
         scope:
           type: string
-          const: locally_indexed_tournaments
+          enum: [chess_results_player_database, locally_indexed_tournaments]
     PlayerResponse:
       type: object
       additionalProperties: false

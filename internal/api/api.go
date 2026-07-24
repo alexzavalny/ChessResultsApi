@@ -371,9 +371,17 @@ func (a *API) searchPlayers(w http.ResponseWriter, r *http.Request) {
 		a.invalid(w, r, "fide_id must contain digits only")
 		return
 	}
-	fed := strings.ToUpper(q.Get("federation"))
+	fed := strings.ToUpper(q.Get("country"))
+	federationAlias := strings.ToUpper(q.Get("federation"))
+	if fed != "" && federationAlias != "" && fed != federationAlias {
+		a.invalid(w, r, "country and federation must match when both are supplied")
+		return
+	}
+	if fed == "" {
+		fed = federationAlias
+	}
 	if fed != "" && (len(fed) != 3 || !letters(fed)) {
-		a.invalid(w, r, "federation must be a three-letter code")
+		a.invalid(w, r, "country must be a three-letter code")
 		return
 	}
 	limit, offset, ok := pagination(r, 100)
@@ -384,12 +392,17 @@ func (a *API) searchPlayers(w http.ResponseWriter, r *http.Request) {
 	if limit == 0 {
 		limit = 20
 	}
-	items, err := a.service.SearchPlayers(r.Context(), q.Get("q"), fide, fed, limit, offset)
+	searchQuery := strings.TrimSpace(q.Get("q"))
+	items, err := a.service.SearchPlayers(r.Context(), searchQuery, fide, fed, limit, offset)
 	if err != nil {
-		a.internal(w, r)
+		a.serviceError(w, r, err, map[string]any{"resource": "player_search"})
 		return
 	}
-	a.writeJSON(w, r, 200, map[string]any{"data": items, "count": len(items), "scope": "locally_indexed_tournaments"}, false)
+	scope := "locally_indexed_tournaments"
+	if searchQuery != "" || fide != "" {
+		scope = "chess_results_player_database"
+	}
+	a.writeJSON(w, r, 200, map[string]any{"data": items, "count": len(items), "scope": scope}, false)
 }
 func (a *API) player(w http.ResponseWriter, r *http.Request) {
 	data, err := a.service.Player(r.Context(), r.PathValue("key"))

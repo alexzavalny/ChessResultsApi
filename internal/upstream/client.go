@@ -157,6 +157,30 @@ func (c *Client) Search(ctx context.Context, federation, from, to string) (strin
 	body, final, err := c.do(ctx, http.MethodPost, searchURL, []byte(form.Encode()), "application/x-www-form-urlencoded")
 	return body, final, err
 }
+func (c *Client) SearchPlayers(ctx context.Context, firstName, lastName, fideID, federation string) (string, string, error) {
+	searchURL := c.url("/SpielerSuche.aspx", url.Values{})
+	first, _, err := c.get(ctx, searchURL)
+	if err != nil {
+		return "", "", err
+	}
+	fields, err := searchparser.HiddenFields(first)
+	if err != nil {
+		return "", "", err
+	}
+	form := url.Values{}
+	for k, v := range fields {
+		form.Set(k, v)
+	}
+	form.Set("ctl00$P1$txt_nachname", lastName)
+	form.Set("ctl00$P1$txt_vorname", firstName)
+	form.Set("ctl00$P1$txt_fideID", fideID)
+	form.Set("ctl00$P1$txt_FED", federation)
+	form.Set("ctl00$P1$combo_Sort", "0")
+	form.Set("ctl00$P1$combo_anzahl_zeilen", "1")
+	form.Set("ctl00$P1$cb_suchen", "Search")
+	form.Del("ctl00$P1$cb_download_Excel")
+	return c.do(ctx, http.MethodPost, searchURL, []byte(form.Encode()), "application/x-www-form-urlencoded")
+}
 func (c *Client) get(ctx context.Context, u string) (string, string, error) {
 	return c.do(ctx, http.MethodGet, u, nil, "")
 }

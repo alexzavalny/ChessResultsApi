@@ -140,12 +140,25 @@ type IndexedPlayer struct {
 	Appearances        []Appearance `json:"appearances,omitempty"`
 }
 
+type PlayerSearchEntry struct {
+	Name           string
+	FIDEID         *string
+	Federation     *string
+	Club           *string
+	TournamentID   string
+	TournamentName string
+	StartNumber    string
+	EndsOn         *string
+}
+
 type Appearance struct {
-	TournamentID string    `json:"tournament_id"`
-	StartNumber  string    `json:"start_number"`
-	DisplayName  string    `json:"display_name"`
-	Federation   *string   `json:"federation"`
-	Club         *string   `json:"club"`
-	Rating       *int      `json:"rating"`
-	SeenAt       time.Time `json:"seen_at"`
+	TournamentID   string    `json:"tournament_id"`
+	TournamentName *string   `json:"tournament_name,omitempty"`
+	StartNumber    string    `json:"start_number"`
+	DisplayName    string    `json:"display_name"`
+	Federation     *string   `json:"federation"`
+	Club           *string   `json:"club"`
+	Rating         *int      `json:"rating"`
+	EndsOn         *string   `json:"ends_on,omitempty"`
+	SeenAt         time.Time `json:"seen_at"`
 }
