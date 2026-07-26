@@ -44,6 +44,9 @@ func Parse(html string, cap int) ([]domain.PlayerSearchEntry, error) {
 		return resultRows == nil
 	})
 	if resultRows == nil {
+		if isPlayerDatabasePage(doc) {
+			return []domain.PlayerSearchEntry{}, nil
+		}
 		return nil, fmt.Errorf("player search result table not found")
 	}
 
@@ -92,13 +95,17 @@ func Parse(html string, cap int) ([]domain.PlayerSearchEntry, error) {
 			EndsOn:         base.Date(base.Cell(cells, base.At(hm, "ends_on"))),
 		})
 	})
-	if len(out) == 0 && strings.Contains(strings.ToLower(base.Text(doc.Text())), "player-database of chess-results") {
+	if len(out) == 0 && isPlayerDatabasePage(doc) {
 		return out, nil
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("player search result rows not found")
 	}
 	return out, nil
+}
+
+func isPlayerDatabasePage(doc *goquery.Document) bool {
+	return strings.Contains(strings.ToLower(base.Text(doc.Text())), "player-database of chess-results")
 }
 
 func directRows(table *goquery.Selection) *goquery.Selection {

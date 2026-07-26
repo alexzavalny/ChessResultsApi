@@ -15,6 +15,7 @@ import (
 	"github.com/alex/easy-chess-results-api/internal/domain"
 	base "github.com/alex/easy-chess-results-api/internal/parser"
 	eventparser "github.com/alex/easy-chess-results-api/internal/parser/event"
+	pairingparser "github.com/alex/easy-chess-results-api/internal/parser/pairing"
 	playerparser "github.com/alex/easy-chess-results-api/internal/parser/player"
 	playersearchparser "github.com/alex/easy-chess-results-api/internal/parser/playersearch"
 	searchparser "github.com/alex/easy-chess-results-api/internal/parser/search"
@@ -142,6 +143,32 @@ func (s *Service) Standings(ctx context.Context, id string, round *int, refresh 
 			return nil, "", fmt.Errorf("index standings: %w", e)
 		}
 		return standings, source, nil
+	})
+	return result, meta, err
+}
+
+func (s *Service) Pairings(ctx context.Context, id string, round *int, refresh bool) (domain.Pairings, domain.Meta, error) {
+	roundKey := "latest"
+	roundArg := ""
+	ttl := s.cfg.ActiveStandingsTTL
+	maxStale := s.cfg.MaxStaleActive
+	if round != nil {
+		roundKey = strconv.Itoa(*round)
+		roundArg = roundKey
+		ttl = s.cfg.CompletedTTL
+		maxStale = s.cfg.MaxStaleCompleted
+	}
+	var result domain.Pairings
+	meta, err := s.cached(ctx, "pairings:"+id+":"+roundKey, ttl, maxStale, refresh, &result, func(ctx context.Context) (any, string, error) {
+		html, source, e := s.upstream.GetTournament(ctx, id, 2, roundArg, "")
+		if e != nil {
+			return nil, "", upErr("tournament_pairings", e)
+		}
+		pairings, e := pairingparser.Parse(html, id)
+		if e != nil {
+			return nil, "", &Error{ParseError, "tournament_pairings", e}
+		}
+		return pairings, source, nil
 	})
 	return result, meta, err
 }

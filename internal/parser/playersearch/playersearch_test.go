@@ -31,3 +31,28 @@ func TestParseNestedPlayerSearchTable(t *testing.T) {
 		t.Fatalf("Sergejs end date = %v", got[1].EndsOn)
 	}
 }
+
+func TestParsePlayerSearchWithoutMatchesReturnsEmptyList(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "player_search_empty.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Parse(string(b), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("got nil entries, want an empty list")
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %d entries, want 0", len(got))
+	}
+}
+
+func TestParseUnknownPlayerSearchLayoutStillFails(t *testing.T) {
+	_, err := Parse("<!doctype html><html><body><p>Unexpected page</p></body></html>", 100)
+	if err == nil {
+		t.Fatal("expected an unknown layout error")
+	}
+}

@@ -106,6 +106,7 @@ func TestOpenAPICoversImplementedRoutes(t *testing.T) {
 		"/api/v1/tournaments",
 		"/api/v1/tournaments/{tournament_id}",
 		"/api/v1/tournaments/{tournament_id}/standings",
+		"/api/v1/tournaments/{tournament_id}/pairings",
 		"/api/v1/tournaments/{tournament_id}/players/{start_number}",
 		"/api/v1/tournaments/{tournament_id}/players/{start_number}/results",
 		"/api/v1/players",
@@ -116,8 +117,19 @@ func TestOpenAPICoversImplementedRoutes(t *testing.T) {
 			t.Errorf("OpenAPI document does not define %s", path)
 		}
 	}
-	if strings.Contains(spec, "/pairings:") {
-		t.Error("OpenAPI document advertises the unimplemented pairings endpoint")
+}
+
+func TestPairingsRejectsInvalidRoundBeforeCallingService(t *testing.T) {
+	handler := New(config.Config{}, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tournaments/42/pairings?round=0", nil))
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(recorder.Body.String(), "round must be a positive integer") {
+		t.Fatalf("unexpected body: %s", recorder.Body.String())
 	}
 }
 

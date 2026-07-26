@@ -75,6 +75,31 @@ type Standings struct {
 	Standings    []Standing `json:"standings"`
 }
 
+type PairingPlayer struct {
+	StartNumber *string  `json:"start_number"`
+	Name        string   `json:"name"`
+	Title       *string  `json:"title"`
+	Rating      *int     `json:"rating"`
+	Federation  *string  `json:"federation"`
+	Points      *float64 `json:"points"`
+	PointsText  string   `json:"points_text"`
+}
+
+type Pairing struct {
+	Board  *int           `json:"board"`
+	White  PairingPlayer  `json:"white"`
+	Black  *PairingPlayer `json:"black"`
+	Result *string        `json:"result"`
+	Status string         `json:"status"`
+}
+
+type Pairings struct {
+	TournamentID string    `json:"tournament_id"`
+	Round        *int      `json:"round"`
+	Heading      string    `json:"heading"`
+	Pairings     []Pairing `json:"pairings"`
+}
+
 type Participant struct {
 	TournamentID        string            `json:"tournament_id"`
 	StartNumber         string            `json:"start_number"`

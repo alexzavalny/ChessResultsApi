@@ -94,6 +94,8 @@ func New(cfg config.Config, svc *service.Service, st *store.Store, log *slog.Log
 	mux.Handle("/api/v1/tournaments/{id}", a.auth(http.HandlerFunc(a.methodNotAllowed)))
 	mux.Handle("GET /api/v1/tournaments/{id}/standings", a.auth(http.HandlerFunc(a.standings)))
 	mux.Handle("/api/v1/tournaments/{id}/standings", a.auth(http.HandlerFunc(a.methodNotAllowed)))
+	mux.Handle("GET /api/v1/tournaments/{id}/pairings", a.auth(http.HandlerFunc(a.pairings)))
+	mux.Handle("/api/v1/tournaments/{id}/pairings", a.auth(http.HandlerFunc(a.methodNotAllowed)))
 	mux.Handle("GET /api/v1/tournaments/{id}/players/{start}", a.auth(http.HandlerFunc(a.participant)))
 	mux.Handle("/api/v1/tournaments/{id}/players/{start}", a.auth(http.HandlerFunc(a.methodNotAllowed)))
 	mux.Handle("GET /api/v1/tournaments/{id}/players/{start}/results", a.auth(http.HandlerFunc(a.results)))
@@ -321,6 +323,33 @@ func (a *API) standings(w http.ResponseWriter, r *http.Request) {
 	}
 	data.Standings = filtered[offset:end]
 	a.writeJSON(w, r, 200, domain.Envelope[domain.Standings]{Data: data, Meta: meta}, meta.Stale)
+}
+func (a *API) pairings(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !validID(id) {
+		a.invalid(w, r, "invalid tournament_id")
+		return
+	}
+	var round *int
+	if value := r.URL.Query().Get("round"); value != "" {
+		number, err := strconv.Atoi(value)
+		if err != nil || number <= 0 {
+			a.invalid(w, r, "round must be a positive integer")
+			return
+		}
+		round = &number
+	}
+	refresh, ok := boolean(r.URL.Query().Get("refresh"))
+	if !ok {
+		a.invalid(w, r, "refresh must be boolean")
+		return
+	}
+	data, meta, err := a.service.Pairings(r.Context(), id, round, refresh)
+	if err != nil {
+		a.serviceError(w, r, err, map[string]any{"resource": "tournament_pairings", "tournament_id": id})
+		return
+	}
+	a.writeJSON(w, r, 200, domain.Envelope[domain.Pairings]{Data: data, Meta: meta}, meta.Stale)
 }
 func (a *API) participant(w http.ResponseWriter, r *http.Request) {
 	id, start, ok := a.ids(w, r)

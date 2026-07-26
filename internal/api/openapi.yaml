@@ -21,7 +21,7 @@ tags:
   - name: Health
     description: Lightweight process and local-store health checks.
   - name: Tournaments
-    description: Tournament discovery, metadata, standings, and participant results.
+    description: Tournament discovery, metadata, standings, pairings, and participant results.
   - name: Players
     description: Players observed and merged into the service's local index.
   - name: Documentation
@@ -265,6 +265,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StandingsResponse"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /api/v1/tournaments/{tournament_id}/pairings:
+    get:
+      tags: [Tournaments]
+      operationId: getTournamentPairings
+      summary: Get tournament pairings and results
+      parameters:
+        - $ref: "#/components/parameters/TournamentID"
+        - name: round
+          in: query
+          description: Positive round number. Omit for the latest/current round.
+          schema:
+            type: integer
+            minimum: 1
+        - $ref: "#/components/parameters/Refresh"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Tournament pairings and results
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/StaleWarning"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingsResponse"
         "304":
           $ref: "#/components/responses/NotModified"
         "400":
@@ -796,6 +841,67 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Standings"
+        meta:
+          $ref: "#/components/schemas/Meta"
+    PairingPlayer:
+      type: object
+      additionalProperties: false
+      required: [start_number, name, title, rating, federation, points, points_text]
+      properties:
+        start_number:
+          type: [string, "null"]
+        name:
+          type: string
+        title:
+          type: [string, "null"]
+        rating:
+          type: [integer, "null"]
+        federation:
+          type: [string, "null"]
+        points:
+          type: [number, "null"]
+        points_text:
+          type: string
+    Pairing:
+      type: object
+      additionalProperties: false
+      required: [board, white, black, result, status]
+      properties:
+        board:
+          type: [integer, "null"]
+        white:
+          $ref: "#/components/schemas/PairingPlayer"
+        black:
+          oneOf:
+            - $ref: "#/components/schemas/PairingPlayer"
+            - type: "null"
+        result:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [normal, bye, not_paired, unpaired]
+    Pairings:
+      type: object
+      additionalProperties: false
+      required: [tournament_id, round, heading, pairings]
+      properties:
+        tournament_id:
+          type: string
+        round:
+          type: [integer, "null"]
+        heading:
+          type: string
+        pairings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Pairing"
+    PairingsResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: "#/components/schemas/Pairings"
         meta:
           $ref: "#/components/schemas/Meta"
     Participant:
