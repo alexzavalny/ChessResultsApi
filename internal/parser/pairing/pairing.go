@@ -92,10 +92,13 @@ func columnsFromHeaders(headers []string) (pairingColumns, bool) {
 		result:      -1,
 		blackPoints: -1, blackTitle: -1, blackName: -1, blackRating: -1, blackFederation: -1, blackNumber: -1,
 	}
+	numberColumns := []int{}
 	for i, header := range headers {
 		switch base.Key(header) {
 		case "bo", "bd", "board":
 			columns.board = i
+		case "no", "number":
+			numberColumns = append(numberColumns, i)
 		case "white":
 			columns.whiteName = i
 		case "black":
@@ -104,23 +107,40 @@ func columnsFromHeaders(headers []string) (pairingColumns, bool) {
 			columns.result = i
 		}
 	}
-	if columns.whiteName < 3 || columns.blackName < 2 || columns.result < 0 {
+	if columns.board < 0 || columns.whiteName < 2 || columns.blackName < 2 || columns.result < 0 {
 		return columns, false
 	}
 
-	// Chess-Results repeats No./Rtg/Pts. for both colors, so their positions
-	// are derived relative to the unique White, Result, and Black headers.
-	columns.whiteNumber = columns.whiteName - 3
-	columns.whiteFederation = columns.whiteName - 2
+	for _, index := range numberColumns {
+		if index < columns.whiteName && index > columns.whiteNumber {
+			columns.whiteNumber = index
+		}
+		if index > columns.blackName && (columns.blackNumber < 0 || index < columns.blackNumber) {
+			columns.blackNumber = index
+		}
+	}
+	if columns.whiteNumber < 0 || columns.blackNumber < 0 {
+		return columns, false
+	}
+
+	// With flag=30 Chess-Results inserts a federation-flag cell between No.
+	// and title for each player. Without it, the federation is carried by the
+	// player-name cell's CSS class and those two columns are absent.
+	if columns.whiteName-columns.whiteNumber >= 3 {
+		columns.whiteFederation = columns.whiteName - 2
+	}
 	columns.whiteTitle = columns.whiteName - 1
 	columns.whiteRating = columns.whiteName + 1
 	columns.whitePoints = columns.result - 1
 	columns.blackPoints = columns.result + 1
 	columns.blackTitle = columns.blackName - 1
 	columns.blackRating = columns.blackName + 1
-	columns.blackFederation = columns.blackName + 2
-	columns.blackNumber = columns.blackName + 3
-	if columns.blackNumber >= len(headers) {
+	if columns.blackNumber-columns.blackName >= 3 {
+		columns.blackFederation = columns.blackName + 2
+	}
+	if columns.whiteRating >= len(headers) || columns.whitePoints < 0 ||
+		columns.blackPoints >= len(headers) || columns.blackRating >= len(headers) ||
+		columns.blackNumber >= len(headers) {
 		return columns, false
 	}
 	return columns, true
@@ -154,18 +174,33 @@ func player(cells []*goquery.Selection, name, number, federation, title, rating,
 		Name:        base.Cell(cells, name),
 		Title:       base.StringPtr(base.Cell(cells, title)),
 		Rating:      base.Int(base.Cell(cells, rating)),
-		Federation:  federationFromCell(cells, federation),
+		Federation:  federationFromCells(cells, federation, name),
 		Points:      score(pointsText),
 		PointsText:  pointsText,
 	}
 }
 
-func federationFromCell(cells []*goquery.Selection, index int) *string {
-	if index < 0 || index >= len(cells) {
-		return nil
+func federationFromCells(cells []*goquery.Selection, flagIndex, nameIndex int) *string {
+	if flagIndex >= 0 && flagIndex < len(cells) {
+		if federation := federationFromFlag(cells[flagIndex]); federation != "" {
+			return base.StringPtr(federation)
+		}
 	}
-	var federation string
-	cells[index].Find("[class]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
+
+	if nameIndex >= 0 && nameIndex < len(cells) {
+		classes, _ := cells[nameIndex].Attr("class")
+		for _, class := range strings.Fields(classes) {
+			if isFederationCode(class) {
+				return base.StringPtr(strings.ToUpper(class))
+			}
+		}
+	}
+	return nil
+}
+
+func federationFromFlag(cell *goquery.Selection) string {
+	federation := ""
+	cell.Find("[class]").EachWithBreak(func(_ int, selection *goquery.Selection) bool {
 		classes, _ := selection.Attr("class")
 		for _, class := range strings.Fields(classes) {
 			if strings.HasPrefix(class, "tn_") && len(class) > 3 {
@@ -175,7 +210,19 @@ func federationFromCell(cells []*goquery.Selection, index int) *string {
 		}
 		return true
 	})
-	return base.StringPtr(federation)
+	return federation
+}
+
+func isFederationCode(value string) bool {
+	if len(value) != 3 {
+		return false
+	}
+	for _, r := range value {
+		if r < 'A' || r > 'Z' {
+			return false
+		}
+	}
+	return true
 }
 
 func score(value string) *float64 {
