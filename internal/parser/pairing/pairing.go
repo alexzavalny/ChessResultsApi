@@ -93,12 +93,18 @@ func columnsFromHeaders(headers []string) (pairingColumns, bool) {
 		blackPoints: -1, blackTitle: -1, blackName: -1, blackRating: -1, blackFederation: -1, blackNumber: -1,
 	}
 	numberColumns := []int{}
+	ratingColumns := []int{}
+	pointsColumns := []int{}
 	for i, header := range headers {
 		switch base.Key(header) {
 		case "bo", "bd", "board":
 			columns.board = i
 		case "no", "number":
 			numberColumns = append(numberColumns, i)
+		case "rtg", "rating":
+			ratingColumns = append(ratingColumns, i)
+		case "pts", "points":
+			pointsColumns = append(pointsColumns, i)
 		case "white":
 			columns.whiteName = i
 		case "black":
@@ -119,28 +125,38 @@ func columnsFromHeaders(headers []string) (pairingColumns, bool) {
 			columns.blackNumber = index
 		}
 	}
-	if columns.whiteNumber < 0 || columns.blackNumber < 0 {
-		return columns, false
+	for _, index := range ratingColumns {
+		if index > columns.whiteName && index < columns.result {
+			columns.whiteRating = index
+		}
+		if index > columns.blackName && (columns.blackRating < 0 || index < columns.blackRating) {
+			columns.blackRating = index
+		}
+	}
+	for _, index := range pointsColumns {
+		if index > columns.whiteName && index < columns.result {
+			columns.whitePoints = index
+		}
+		if index > columns.result && index < columns.blackName && columns.blackPoints < 0 {
+			columns.blackPoints = index
+		}
 	}
 
 	// With flag=30 Chess-Results inserts a federation-flag cell between No.
 	// and title for each player. Without it, the federation is carried by the
-	// player-name cell's CSS class and those two columns are absent.
-	if columns.whiteName-columns.whiteNumber >= 3 {
+	// player-name cell's CSS class. Compact tables can also omit No. and Rtg;
+	// their player links still carry the tournament start number.
+	if columns.whiteNumber >= 0 && columns.whiteName-columns.whiteNumber >= 3 {
 		columns.whiteFederation = columns.whiteName - 2
 	}
 	columns.whiteTitle = columns.whiteName - 1
-	columns.whiteRating = columns.whiteName + 1
-	columns.whitePoints = columns.result - 1
-	columns.blackPoints = columns.result + 1
 	columns.blackTitle = columns.blackName - 1
-	columns.blackRating = columns.blackName + 1
-	if columns.blackNumber-columns.blackName >= 3 {
+	if columns.blackNumber >= 0 && columns.blackNumber-columns.blackName >= 3 {
 		columns.blackFederation = columns.blackName + 2
 	}
-	if columns.whiteRating >= len(headers) || columns.whitePoints < 0 ||
-		columns.blackPoints >= len(headers) || columns.blackRating >= len(headers) ||
-		columns.blackNumber >= len(headers) {
+	if columns.whitePoints < 0 || columns.blackPoints < 0 ||
+		columns.whitePoints >= columns.result || columns.blackPoints <= columns.result ||
+		columns.blackPoints >= columns.blackName || columns.blackName >= len(headers) {
 		return columns, false
 	}
 	return columns, true
@@ -170,7 +186,7 @@ func findTable(doc *goquery.Document) (*goquery.Selection, string) {
 func player(cells []*goquery.Selection, name, number, federation, title, rating, points int) domain.PairingPlayer {
 	pointsText := base.Cell(cells, points)
 	return domain.PairingPlayer{
-		StartNumber: base.StringPtr(base.Cell(cells, number)),
+		StartNumber: startNumberFromCells(cells, number, name),
 		Name:        base.Cell(cells, name),
 		Title:       base.StringPtr(base.Cell(cells, title)),
 		Rating:      base.Int(base.Cell(cells, rating)),
@@ -178,6 +194,27 @@ func player(cells []*goquery.Selection, name, number, federation, title, rating,
 		Points:      score(pointsText),
 		PointsText:  pointsText,
 	}
+}
+
+func startNumberFromCells(cells []*goquery.Selection, numberIndex, nameIndex int) *string {
+	if startNumber := base.StringPtr(base.Cell(cells, numberIndex)); startNumber != nil {
+		return startNumber
+	}
+	if nameIndex < 0 || nameIndex >= len(cells) {
+		return nil
+	}
+
+	var startNumber string
+	cells[nameIndex].Find("a[href]").EachWithBreak(func(_ int, link *goquery.Selection) bool {
+		href, _ := link.Attr("href")
+		value, ok := base.StartNumber(href)
+		if ok {
+			startNumber = value
+			return false
+		}
+		return true
+	})
+	return base.StringPtr(startNumber)
 }
 
 func federationFromCells(cells []*goquery.Selection, flagIndex, nameIndex int) *string {

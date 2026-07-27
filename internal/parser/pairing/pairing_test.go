@@ -75,3 +75,41 @@ func TestParsePairingsWithoutFlagColumns(t *testing.T) {
 		t.Fatalf("bye: %#v", bye)
 	}
 }
+
+func TestParseCompactPairingsWithStartNumbersInLinks(t *testing.T) {
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "testdata", "pairings_compact.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Parse(string(fixture), "1457736")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Round == nil || *result.Round != 7 || len(result.Pairings) != 2 {
+		t.Fatalf("pairings: %#v", result)
+	}
+
+	first := result.Pairings[0]
+	if first.Board == nil || *first.Board != 1 ||
+		first.White.StartNumber == nil || *first.White.StartNumber != "7" ||
+		first.White.Name != "Sersnovs, Marks" ||
+		first.White.Title == nil || *first.White.Title != "II" ||
+		first.White.Rating != nil ||
+		first.White.Federation == nil || *first.White.Federation != "LAT" ||
+		first.White.Points == nil || *first.White.Points != 4.5 ||
+		first.Black == nil || first.Black.StartNumber == nil || *first.Black.StartNumber != "5" ||
+		first.Black.Name != "Beniosev, David" ||
+		first.Black.Rating != nil ||
+		first.Result == nil || *first.Result != "0 - 1" {
+		t.Fatalf("first pairing: %#v", first)
+	}
+
+	bye := result.Pairings[1]
+	if bye.Board == nil || *bye.Board != 12 ||
+		bye.White.StartNumber == nil || *bye.White.StartNumber != "16" ||
+		bye.Status != "bye" || bye.Black != nil ||
+		bye.Result == nil || *bye.Result != "1" {
+		t.Fatalf("bye: %#v", bye)
+	}
+}
