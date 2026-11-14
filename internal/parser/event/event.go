@@ -94,6 +94,7 @@ func parseMetadata(doc *goquery.Document, ranking *goquery.Selection, out *domai
 		}
 	})
 	if best == nil || bestScore < 3 {
+		setNameFromHeading(doc, out)
 		return
 	}
 	best.Find("table").First().Find("tr").Each(func(_ int, r *goquery.Selection) {
@@ -106,7 +107,11 @@ func parseMetadata(doc *goquery.Document, ranking *goquery.Selection, out *domai
 			return
 		}
 		k := base.Key(label)
-		switch knownMeta[k] {
+		key := knownMeta[k]
+		if key == "" && strings.HasPrefix(k, "time_control") {
+			key = "time_control"
+		}
+		switch key {
 		case "name":
 			out.Name = val
 		case "federation":
@@ -119,16 +124,48 @@ func parseMetadata(doc *goquery.Document, ranking *goquery.Selection, out *domai
 		case "tournament_type":
 			out.TournamentType = base.StringPtr(val)
 		case "time_control":
-			out.TimeControl = base.StringPtr(val)
+			if out.TimeControl == nil {
+				out.TimeControl = base.StringPtr(val)
+			}
 		default:
 			out.Extra[k] = val
 		}
 	})
+	// Chess-Results renders the tournament name as the dialog's <h2> and only
+	// keeps federation/date/rounds in the label/value table.
+	if out.Name == "" {
+		setNameFromHeading(doc, out)
+	}
 	last := base.Text(best.Find(".CRsmall").Text())
 	if last != "" {
 		out.Extra["last_update_text"] = last
 	}
 }
+
+// setNameFromHeading picks the tournament title from the page's <h2>. Older
+// tournaments hide the metadata table behind a "show details" button, so the
+// heading is often the only place the name appears.
+func setNameFromHeading(doc *goquery.Document, t *domain.Tournament) {
+	doc.Find("h2").EachWithBreak(func(_ int, h *goquery.Selection) bool {
+		text := base.Text(h.Text())
+		if text == "" || genericHeading(text) {
+			return true
+		}
+		t.Name = text
+		return false
+	})
+}
+
+func genericHeading(s string) bool {
+	h := strings.ToLower(strings.TrimSpace(s))
+	for _, generic := range []string{"tournament details", "tournament info", "turnierdetails", "final ranking", "rank after", "pairings", "player info"} {
+		if strings.Contains(h, generic) {
+			return true
+		}
+	}
+	return false
+}
+
 func parseDates(s string, t *domain.Tournament) {
 	re := regexp.MustCompile(`\d{4}[./-]\d{2}[./-]\d{2}`)
 	m := re.FindAllString(s, -1)

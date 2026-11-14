@@ -40,7 +40,7 @@ func Load() (Config, error) {
 	c := Config{
 		ListenAddr: env("LISTEN_ADDR", "127.0.0.1:8080"), DatabasePath: env("DATABASE_PATH", "./data/api.sqlite"),
 		DefaultFederation: strings.ToUpper(env("DEFAULT_COUNTRY", env("DEFAULT_FEDERATION", "LAT"))), UpstreamLanguage: env("UPSTREAM_LANGUAGE", "1"),
-		UpstreamBaseURL: env("UPSTREAM_BASE_URL", "https://s2.chess-results.com"), LogLevel: env("LOG_LEVEL", "info"), LogFormat: env("LOG_FORMAT", "json"),
+		UpstreamBaseURL: env("UPSTREAM_BASE_URL", "https://s1.chess-results.com,https://s3.chess-results.com,https://s4.chess-results.com"), LogLevel: env("LOG_LEVEL", "info"), LogFormat: env("LOG_FORMAT", "json"),
 		MaxSearchIntervalDays: envInt("MAX_SEARCH_INTERVAL_DAYS", 366), MaxSearchResults: envInt("MAX_SEARCH_RESULTS", 500),
 		CacheControlMaxAge: envInt("CACHE_CONTROL_MAX_AGE", 30), APIKeys: parseKeys(os.Getenv("API_KEYS")),
 		CORSAllowedOrigins:      parseKeys(env("CORS_ALLOWED_ORIGINS", "https://alexzavalny.github.io,http://localhost:8000,http://127.0.0.1:8000")),

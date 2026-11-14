@@ -50,6 +50,12 @@ go run ./cmd/api
 
 The default address is `127.0.0.1:8080` and the default database is `./data/api.sqlite`. Configuration is validated before startup. A non-private bind is rejected unless API keys are configured or `ALLOW_INSECURE_PUBLIC_BIND=true` is explicitly set.
 
+`UPSTREAM_BASE_URL` takes one base URL or a comma-separated list of mirrors
+(`https://s1.chess-results.com,https://s3.chess-results.com,…`). A request that
+fails at the transport level (DNS, connect, TLS — for example an expired
+certificate) falls through to the next mirror, and the mirror that answered
+last is tried first afterwards.
+
 When `API_KEYS` is a comma-separated list, API calls require:
 
 ```text

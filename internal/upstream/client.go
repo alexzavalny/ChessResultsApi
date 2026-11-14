@@ -28,6 +28,8 @@ func (e *HTTPError) Error() string { return fmt.Sprintf("upstream status %d", e.
 
 type Client struct {
 	base        *url.URL
+	bases       []*url.URL
+	baseMu      sync.RWMutex
 	language    string
 	maxBody     int64
 	http        *http.Client
@@ -37,13 +39,27 @@ type Client struct {
 	last        map[string]time.Time
 }
 
+// New accepts one base URL or a comma-separated list of mirrors. Requests that
+// fail at the transport level (DNS, connect, TLS) move on to the next mirror,
+// and the one that answered last is tried first for subsequent requests.
 func New(baseURL, language string, timeout time.Duration, concurrency int, minInterval time.Duration, maxBody int64) (*Client, error) {
-	base, err := url.Parse(baseURL)
-	if err != nil || base.Scheme == "" || base.Host == "" {
+	var bases []*url.URL
+	for _, raw := range strings.Split(baseURL, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		base, err := url.Parse(raw)
+		if err != nil || base.Scheme == "" || base.Host == "" {
+			return nil, fmt.Errorf("invalid upstream base URL %q", raw)
+		}
+		bases = append(bases, base)
+	}
+	if len(bases) == 0 {
 		return nil, fmt.Errorf("invalid upstream base URL")
 	}
 	jar, _ := cookiejar.New(nil)
-	c := &Client{base: base, language: language, maxBody: maxBody, sem: make(chan struct{}, concurrency), minInterval: minInterval, last: map[string]time.Time{}}
+	c := &Client{base: bases[0], bases: bases, language: language, maxBody: maxBody, sem: make(chan struct{}, concurrency), minInterval: minInterval, last: map[string]time.Time{}}
 	tr := &http.Transport{DialContext: c.dialContext, ForceAttemptHTTP2: true, MaxIdleConns: 8, MaxIdleConnsPerHost: 4, ResponseHeaderTimeout: 8 * time.Second, TLSHandshakeTimeout: 5 * time.Second}
 	hc := &http.Client{Timeout: timeout, Transport: tr, Jar: jar}
 	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -59,13 +75,48 @@ func New(baseURL, language string, timeout time.Duration, concurrency int, minIn
 	return c, nil
 }
 
+func (c *Client) currentBase() *url.URL {
+	c.baseMu.RLock()
+	defer c.baseMu.RUnlock()
+	return c.base
+}
+
+func (c *Client) useBase(b *url.URL) {
+	c.baseMu.Lock()
+	c.base = b
+	c.baseMu.Unlock()
+}
+
+// baseOrder returns the current mirror first, then the rest.
+func (c *Client) baseOrder() []*url.URL {
+	c.baseMu.RLock()
+	defer c.baseMu.RUnlock()
+	out := make([]*url.URL, 0, len(c.bases))
+	out = append(out, c.base)
+	for _, b := range c.bases {
+		if b.String() != c.base.String() {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func withBase(u string, b *url.URL) string {
+	p, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+	p.Scheme, p.Host = b.Scheme, b.Host
+	return p.String()
+}
+
 func (c *Client) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
 	if err != nil {
 		return nil, err
 	}
 	dialer := &net.Dialer{Timeout: 5 * time.Second, KeepAlive: 30 * time.Second}
-	baseHost := strings.ToLower(c.base.Hostname())
+	baseHost := strings.ToLower(c.currentBase().Hostname())
 	if baseHost == "localhost" || net.ParseIP(baseHost) != nil {
 		return dialer.DialContext(ctx, network, address)
 	}
@@ -87,12 +138,18 @@ func (c *Client) dialContext(ctx context.Context, network, address string) (net.
 
 func (c *Client) allowedHost(h string) bool {
 	h = strings.ToLower(h)
-	base := strings.ToLower(c.base.Hostname())
-	if h == base {
-		return true
+	local := false
+	for _, b := range c.bases {
+		bh := strings.ToLower(b.Hostname())
+		if h == bh {
+			return true
+		}
+		if bh == "localhost" || net.ParseIP(bh) != nil {
+			local = true
+		}
 	}
-	if base == "localhost" || net.ParseIP(base) != nil {
-		return h == base
+	if local {
+		return false
 	}
 	if h == "chess-results.com" {
 		return true
@@ -108,7 +165,7 @@ func (c *Client) allowedHost(h string) bool {
 	return e == nil
 }
 func (c *Client) url(path string, q url.Values) string {
-	u := *c.base
+	u := *c.currentBase()
 	u.Path = path
 	q.Set("lan", c.language)
 	u.RawQuery = q.Encode()
@@ -185,6 +242,26 @@ func (c *Client) get(ctx context.Context, u string) (string, string, error) {
 	return c.do(ctx, http.MethodGet, u, nil, "")
 }
 func (c *Client) do(ctx context.Context, method, u string, body []byte, contentType string) (string, string, error) {
+	var lastErr error
+	for _, base := range c.baseOrder() {
+		text, final, err := c.attempt(ctx, method, withBase(u, base), body, contentType)
+		if err == nil {
+			c.useBase(base)
+			return text, final, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return "", "", ctx.Err()
+		}
+		var he *HTTPError
+		if errors.As(err, &he) && he.Status != 429 && he.Status != 502 && he.Status != 503 && he.Status != 504 {
+			return "", "", err
+		}
+	}
+	return "", "", lastErr
+}
+
+func (c *Client) attempt(ctx context.Context, method, u string, body []byte, contentType string) (string, string, error) {
 	var last error
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {

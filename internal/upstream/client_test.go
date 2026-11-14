@@ -76,3 +76,35 @@ func TestPlayerSearchUsesChessResultsPlayerDatabaseForm(t *testing.T) {
 		t.Fatalf("got %d requests, want 2", requests)
 	}
 }
+
+func TestFallsBackToNextMirror(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+
+	requests := 0
+	live := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!doctype html><html><body>ok</body></html>`))
+	}))
+	defer live.Close()
+
+	c, err := New(deadURL+","+live.URL, "1", 2*time.Second, 2, time.Millisecond, 1024*1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := c.GetTournament(context.Background(), "1", 1, "", ""); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	if requests != 1 {
+		t.Fatalf("got %d requests on the live mirror, want 1", requests)
+	}
+	// The mirror that answered is now preferred, so no second dial to the dead one.
+	if _, _, err := c.GetTournament(context.Background(), "1", 1, "", ""); err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("got %d requests on the live mirror, want 2", requests)
+	}
+}
